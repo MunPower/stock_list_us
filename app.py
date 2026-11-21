@@ -160,6 +160,91 @@ def top_list(n: int = TOP_N, kind: str = "etf"):
     return [], asof
 
 
+# ───────────── 한글 종목명 ─────────────
+# ① 자주 나오는 종목은 아래 이름표에서 바로 → ② 없으면 네이버 증권에서 찾아옴(하루 동안 저장)
+KR_NAMES = {
+    "NVDA": "엔비디아", "AAPL": "애플", "MSFT": "마이크로소프트", "AMZN": "아마존닷컴", "GOOGL": "알파벳 A",
+    "GOOG": "알파벳 C", "META": "메타 플랫폼스", "TSLA": "테슬라", "AVGO": "브로드컴", "AMD": "AMD",
+    "MU": "마이크론 테크놀로지", "INTC": "인텔", "TSM": "TSMC(ADR)", "ANT": "앤트로픽", "SPCX": "스페이스X",
+    "SNDK": "샌디스크", "PLTR": "팔란티어", "NFLX": "넷플릭스", "MSTR": "스트래티지", "COIN": "코인베이스",
+    "SMCI": "슈퍼마이크로컴퓨터", "UBER": "우버", "ORCL": "오라클", "CRM": "세일즈포스", "LLY": "일라이 릴리",
+    "UNH": "유나이티드헬스", "JPM": "JP모건", "V": "비자", "MA": "마스터카드", "BAC": "뱅크오브아메리카",
+    "XOM": "엑슨모빌", "WMT": "월마트", "COST": "코스트코", "HD": "홈디포", "ADBE": "어도비",
+    "QCOM": "퀄컴", "ARM": "ARM 홀딩스", "BABA": "알리바바", "PDD": "PDD 홀딩스", "SHOP": "쇼피파이",
+    "SNOW": "스노우플레이크", "PANW": "팔로알토 네트웍스", "CRWD": "크라우드스트라이크", "ABNB": "에어비앤비",
+    "PYPL": "페이팔", "DIS": "디즈니", "BA": "보잉", "NKE": "나이키", "KO": "코카콜라", "PEP": "펩시코",
+    "CVX": "셰브론", "GS": "골드만삭스", "MS": "모건스탠리", "WFC": "웰스파고", "C": "씨티그룹",
+    "CAT": "캐터필러", "GE": "GE 에어로스페이스", "IBM": "IBM", "TXN": "텍사스 인스트루먼트",
+    "AMAT": "어플라이드 머티어리얼즈", "LRCX": "램리서치", "KLAC": "KLA", "MRVL": "마벨 테크놀로지",
+    "ASML": "ASML(ADR)", "NVO": "노보 노디스크(ADR)", "RIVN": "리비안", "SOFI": "소파이", "HOOD": "로빈후드",
+    "APP": "앱러빈", "RKLB": "로켓랩", "IONQ": "아이온큐", "ANET": "아리스타 네트웍스", "DELL": "델",
+    "VRT": "버티브", "NOW": "서비스나우", "INTU": "인튜이트", "ISRG": "인튜이티브 서지컬",
+    "BRK-B": "버크셔 해서웨이 B", "JNJ": "존슨앤드존슨", "PG": "P&G", "ABBV": "애브비", "MRK": "머크",
+    "UNP": "유니온퍼시픽", "CSCO": "시스코", "SBUX": "스타벅스", "MCD": "맥도날드", "T": "AT&T",
+    "VZ": "버라이즌", "PFE": "화이자", "AXP": "아메리칸 익스프레스", "BKNG": "부킹 홀딩스", "SPOT": "스포티파이",
+    "NBIS": "네비우스", "CRWV": "코어위브", "OKLO": "오클로", "SMR": "뉴스케일 파워", "CEG": "컨스텔레이션 에너지",
+    "VST": "비스트라", "GEV": "GE 버노바", "WDC": "웨스턴디지털", "STX": "씨게이트", "CRCL": "써클",
+    "HIMS": "힘스앤허스", "OXY": "옥시덴탈", "RDDT": "레딧", "DDOG": "데이터독",
+    "NET": "클라우드플레어", "ZS": "지스케일러", "MDB": "몽고DB", "TTD": "트레이드 데스크", "LULU": "룰루레몬",
+    "ON": "온세미", "MPWR": "모놀리식 파워", "ADI": "아날로그디바이스", "NXPI": "NXP", "CLS": "셀레스티카",
+    "BIDU": "바이두", "JD": "징둥닷컴", "NIO": "니오", "LI": "리오토", "XPEV": "샤오펑", "TEM": "템퍼스 AI",
+    # ETF
+    "SPY": "S&P500 ETF(SPDR)", "QQQ": "나스닥100 ETF(인베스코)", "VOO": "S&P500 ETF(뱅가드)",
+    "IVV": "S&P500 ETF(iShares)", "IWM": "러셀2000 ETF", "SOXL": "반도체 3배 ETF", "SOXS": "반도체 -3배 ETF",
+    "TQQQ": "나스닥100 3배 ETF", "SQQQ": "나스닥100 -3배 ETF", "SMH": "반도체 ETF(반에크)",
+    "SOXX": "반도체 ETF(iShares)", "TLT": "미국 장기국채 ETF", "GLD": "금 ETF", "SLV": "은 ETF",
+    "XLF": "금융 섹터 ETF", "XLK": "기술 섹터 ETF", "XLE": "에너지 섹터 ETF", "XLV": "헬스케어 섹터 ETF",
+    "DIA": "다우존스 ETF", "VTI": "미국 전체시장 ETF", "QQQM": "나스닥100 ETF(QQQM)", "SCHD": "배당 ETF(SCHD)",
+    "TSLL": "테슬라 2배 ETF", "NVDL": "엔비디아 2배 ETF", "UVXY": "VIX 단기선물 1.5배 ETF",
+    "HYG": "하이일드 채권 ETF", "LQD": "투자등급 회사채 ETF", "EEM": "신흥국 ETF", "EFA": "선진국 ETF",
+    "FXI": "중국 대형주 ETF", "KWEB": "중국 인터넷 ETF", "ARKK": "ARK 혁신 ETF", "IBIT": "비트코인 ETF(iShares)",
+    "ETHA": "이더리움 ETF(iShares)", "BITO": "비트코인 선물 ETF", "TNA": "러셀2000 3배 ETF",
+    "SPXL": "S&P500 3배 ETF", "UPRO": "S&P500 3배 ETF(UPRO)", "SPXU": "S&P500 -3배 ETF",
+    "LABU": "바이오 3배 ETF", "XBI": "바이오 ETF", "KRE": "지역은행 ETF", "GDX": "금광 ETF", "USO": "원유 ETF",
+    "BND": "미국 종합채권 ETF", "IEF": "미국 중기국채 ETF", "SHY": "미국 단기국채 ETF", "SGOV": "초단기 국채 ETF",
+    "BIL": "초단기 국채 ETF(BIL)", "RSP": "S&P500 동일가중 ETF", "VUG": "성장주 ETF(뱅가드)", "VEA": "선진국 ETF(뱅가드)",
+}
+
+
+def _kr_from_naver(t: str):
+    """네이버 증권에서 미국 종목 한글 이름 찾기 (못 찾으면 None)"""
+    try:
+        r = requests.get("https://ac.stock.naver.com/ac", params={"q": t, "target": "stock"}, headers=UA, timeout=3)
+        for it in r.json().get("items", []):
+            code = str(it.get("code", "")).upper().replace(".", "-")
+            if code == t and str(it.get("nationCode", "")).upper() in ("USA", "US") and it.get("name"):
+                return str(it["name"])
+    except Exception:
+        pass
+    for suf in (".O", "", ".K", ".N"):          # .O 나스닥 / 없음·.N 뉴욕 / .K 아멕스(ETF)
+        try:
+            r = requests.get(f"https://api.stock.naver.com/stock/{t.replace('-', '.')}{suf}/basic",
+                             headers=UA, timeout=3)
+            nm = r.json().get("stockName")
+            if nm:
+                return str(nm)
+        except Exception:
+            continue
+    return None
+
+
+@st.cache_data(ttl=86400, show_spinner=False)
+def kr_names(tickers: tuple) -> dict:
+    """{티커: 한글이름}. 이름표에 없는 종목만 네이버에서 동시에 찾음(전체 6초 안에)"""
+    out = {t: KR_NAMES[t] for t in tickers if t in KR_NAMES}
+    miss = [t for t in tickers if t not in out]
+    if miss:
+        from concurrent.futures import wait
+        ex = ThreadPoolExecutor(max_workers=8)
+        futs = {ex.submit(_kr_from_naver, t): t for t in miss}
+        wait(futs, timeout=6)
+        ex.shutdown(wait=False, cancel_futures=True)
+        for f, t in futs.items():
+            if f.done() and not f.exception() and f.result():
+                out[t] = f.result()
+    return out
+
+
 # ───────────── 공통: 시세 받기 + 매도선·매수선 계산 (리스트 신호와 차트가 똑같이 사용) ─────────────
 
 
@@ -376,7 +461,8 @@ LIST_CSS = """<style>
 .sl-wrap td{padding:0;border:1px solid #e3e6ea;white-space:nowrap;text-align:right;font-variant-numeric:tabular-nums}
 .sl-wrap td a{display:block;padding:6px;color:inherit !important;text-decoration:none !important}
 .sl-wrap td.rk{text-align:center;color:#888;width:34px}
-.sl-wrap td.nm{text-align:left;font-weight:700;color:#111;max-width:210px;overflow:hidden;text-overflow:ellipsis}
+.sl-wrap td.nm{text-align:left;font-weight:700;color:#111;max-width:260px;overflow:hidden;text-overflow:ellipsis}
+.sl-wrap td.nm .kr{font-weight:600;color:#1f4fa8;margin-left:4px}
 .sl-wrap td.nm .sub{display:block;font-size:11px;font-weight:400;color:#999;overflow:hidden;text-overflow:ellipsis}
 .sl-wrap td.tv{color:#333}
 .sl-wrap tr:nth-child(even) td{background:#fafbfc}
@@ -387,7 +473,8 @@ LIST_CSS = """<style>
  .sl-top a.tab{min-width:80px;padding:7px 10px;font-size:15px}
  .sl-top a.tab.rf{min-width:0;padding:7px 8px;font-size:13px}
  .sl-wrap table{min-width:680px}
- .sl-wrap td.nm{max-width:118px}
+ .sl-wrap td.nm{max-width:150px}
+ .sl-wrap td.nm .kr{display:block;margin-left:0;font-size:12px}
  .sl-wrap th.rk,.sl-wrap td.rk{position:sticky;left:0;z-index:2;background:#fff}
  .sl-wrap th.nm,.sl-wrap td.nm{position:sticky;left:34px;z-index:2;background:#fff;box-shadow:1px 0 0 #d3d8df}
  .sl-wrap th.rk,.sl-wrap th.nm{background:#e9edf3}
@@ -412,6 +499,11 @@ if not qp.get("code"):
         st.error("종목 리스트를 불러오지 못했습니다. 잠시 후 새로고침해 주세요.")
         st.stop()
 
+    try:
+        KR = kr_names(tuple(r[0] for r in rows))
+    except Exception:
+        KR = {}
+
     def build(sig, tm=""):
         h = [LIST_CSS, '<div class="sl-top">']
         for k_, label in (("stock", "주식만"), ("etf", "ETF 포함")):
@@ -423,7 +515,7 @@ if not qp.get("code"):
                  '<th class="nm">종목</th><th>신호</th><th>현재가($)</th><th>대비</th><th>등락률</th>'
                  '<th>거래대금</th><th>시가</th><th>고가</th><th>저가</th></tr></thead><tbody>')
         for i, (c, nm, close, chg, pct, op, hi, lo, tv, ex) in enumerate(rows, 1):
-            href = html.escape(link(code=c, name=nm, ex=ex, t=kind))
+            href = html.escape(link(code=c, name=(f"{KR[c]} ({nm})" if c in KR else nm), ex=ex, t=kind))
             a = f'<a href="{href}" target="_self">'
             prev = close - chg if (close is not None and chg is not None) else None
             k = "eq" if pct is None else ("up" if pct > 0 else ("dn" if pct < 0 else "eq"))
@@ -431,6 +523,8 @@ if not qp.get("code"):
             pct_t = "-" if pct is None else f"{pct:+.2f}%" if pct else "0.00%"
             nm_e, c_e = html.escape(nm), html.escape(c)
             sub = f'<span class="sub">{nm_e}</span>' if nm and nm.upper() != c.upper() else ""
+            kr = KR.get(c)
+            kr_h = f' <span class="kr">{html.escape(kr)}</span>' if kr else ""
             if sig is None or c not in sig:                   # 아직 계산 중
                 sg = '<td class="sg wait">' + a + '…</a></td>'
             else:
@@ -440,7 +534,7 @@ if not qp.get("code"):
                       '<td class="sg">' + a + '&nbsp;</a></td>')
             h.append(
                 f'<tr><td class="rk">{a}{i}</a></td>'
-                f'<td class="nm" title="{nm_e}">{a}{c_e}{sub}</a></td>'
+                f'<td class="nm" title="{nm_e}">{a}{c_e}{kr_h}{sub}</a></td>'
                 f'{sg}'
                 f'<td class="{k}">{a}{n2(close)}</a></td>'
                 f'<td class="{k}">{a}{arrow}{n2(None if chg is None else abs(chg))}</a></td>'
