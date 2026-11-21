@@ -149,7 +149,7 @@ def _from_pool(n, kind="stock"):
 
 
 @st.cache_data(ttl=600, show_spinner=False)
-def top_list(n: int = TOP_N, kind: str = "stock"):
+def top_list(n: int = TOP_N, kind: str = "etf"):
     """미국 주식 거래대금 1~n위. 10분 동안은 저장해 둔 목록을 그대로 사용 (새로고침 버튼으로 바로 다시 받기)"""
     asof = pd.Timestamp.now(tz="Asia/Seoul").strftime("%m-%d %H:%M")
     for f in (_from_tradingview, _from_pool):
@@ -397,7 +397,7 @@ LIST_CSS = """<style>
 
 
 if not qp.get("code"):
-    kind = "etf" if qp.get("t") == "etf" else "stock"      # 기본값은 주식만
+    kind = "stock" if qp.get("t") == "stock" else "etf"      # 기본값은 ETF 포함
     if qp.get("refresh"):                                         # ↻ 새로고침을 눌렀음 → 시세 다시 받기
         top_list.clear()
         idx_hist.clear()
@@ -482,7 +482,7 @@ BACK_CSS = ('<style>.cv-top{display:flex;align-items:center;gap:12px;flex-wrap:w
             '.tm{font-size:12px;color:#888;white-space:nowrap}.tm b{font-weight:600}</style>')
 
 
-_back_t = "etf" if qp.get("t") == "etf" else "stock"
+_back_t = "stock" if qp.get("t") == "stock" else "etf"
 
 
 def top_bar(tm: str) -> str:
