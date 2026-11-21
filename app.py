@@ -58,13 +58,14 @@ def _row(code, name, close, chg, ratio, opn, high, low, tval, ex):
 
 # ───────────── 거래대금 순위 받기 ─────────────
 # ① TradingView 종목 검색(거래대금 Value.Traded 순) → ② 안 되면 대형주 후보를 직접 받아 (종가×거래량)으로 순위
-def _from_tradingview(n):
+def _from_tradingview(n, kind="stock"):
+    types = ["stock", "dr"] + (["fund"] if kind == "etf" else [])   # fund = ETF
     body = {
         "markets": ["america"],
         "symbols": {"query": {"types": []}, "tickers": []},
         "options": {"lang": "en"},
         "filter": [
-            {"left": "type", "operation": "in_range", "right": ["stock", "dr"]},      # 일반 주식·ADR (ETF 제외)
+            {"left": "type", "operation": "in_range", "right": types},      # 일반 주식·ADR (+ ETF 포함 시 ETF)
             {"left": "exchange", "operation": "in_range", "right": ["NASDAQ", "NYSE", "AMEX"]},
             {"left": "is_primary", "operation": "equal", "right": True},
         ],
@@ -89,7 +90,8 @@ def _from_tradingview(n):
 POOL = ("NVDA TSLA AAPL MSFT AMZN META GOOGL GOOG AVGO AMD PLTR NFLX MSTR COIN SMCI MU INTC UBER ORCL CRM "
         "LLY UNH JPM V MA BAC XOM WMT COST HD ADBE QCOM ARM TSM BABA PDD SHOP SNOW PANW CRWD ABNB PYPL "
         "DIS BA NKE KO PEP CVX GS MS WFC C CAT GE IBM TXN AMAT LRCX KLAC MRVL ASML NVO RIVN SOFI HOOD "
-        "APP RKLB IONQ ANET DELL VRT NOW INTU ISRG BRK-B JNJ PG ABBV MRK").split()
+        "APP RKLB IONQ ANET DELL VRT NOW INTU ISRG BRK-B JNJ PG ABBV MRK ANT SPCX SNDK").split()
+POOL_ETF = ("SPY QQQ VOO IVV IWM SOXL TQQQ SMH SOXX SOXS SQQQ TLT GLD XLF").split()
 POOL_EX = {}   # 후보 종목의 거래소(모르면 비워 둠 → 지수는 S&P500)
 
 
@@ -123,7 +125,7 @@ def _daily(sym: str, start: str):
     return _yahoo_daily(sym, start)
 
 
-def _from_pool(n):
+def _from_pool(n, kind="stock"):
     start = (pd.Timestamp.today() - pd.Timedelta(days=12)).strftime("%Y-%m-%d")
 
     def one(t):
@@ -139,7 +141,7 @@ def _from_pool(n):
             return None
 
     with ThreadPoolExecutor(max_workers=8) as ex:
-        rows = [r for r in ex.map(one, POOL) if r and r[8]]
+        rows = [r for r in ex.map(one, POOL + (POOL_ETF if kind == "etf" else [])) if r and r[8]]
     rows.sort(key=lambda r: r[8], reverse=True)
     if not rows:
         raise ValueError("빈 목록")
@@ -147,12 +149,12 @@ def _from_pool(n):
 
 
 @st.cache_data(ttl=600, show_spinner=False)
-def top_list(n: int = TOP_N):
+def top_list(n: int = TOP_N, kind: str = "stock"):
     """미국 주식 거래대금 1~n위. 10분 동안은 저장해 둔 목록을 그대로 사용 (새로고침 버튼으로 바로 다시 받기)"""
     asof = pd.Timestamp.now(tz="Asia/Seoul").strftime("%m-%d %H:%M")
     for f in (_from_tradingview, _from_pool):
         try:
-            return f(n), asof
+            return f(n, kind), asof
         except Exception:
             continue
     return [], asof
@@ -395,6 +397,7 @@ LIST_CSS = """<style>
 
 
 if not qp.get("code"):
+    kind = "etf" if qp.get("t") == "etf" else "stock"      # 기본값은 주식만
     if qp.get("refresh"):                                         # ↻ 새로고침을 눌렀음 → 시세 다시 받기
         top_list.clear()
         idx_hist.clear()
@@ -403,7 +406,7 @@ if not qp.get("code"):
         del st.query_params["refresh"]
     with st.spinner("미국 주식 거래대금 순위를 불러오는 중입니다…"):
         _tl = time.time()
-        rows, asof = top_list()
+        rows, asof = top_list(TOP_N, kind)
         t_list = time.time() - _tl
     if not rows:
         st.error("종목 리스트를 불러오지 못했습니다. 잠시 후 새로고침해 주세요.")
@@ -411,15 +414,16 @@ if not qp.get("code"):
 
     def build(sig, tm=""):
         h = [LIST_CSS, '<div class="sl-top">']
-        h.append(f'<a class="tab on" href="{link()}" target="_self">미국 거래대금 TOP{TOP_N}</a>')
-        h.append(f'<a class="tab rf" href="{link(refresh=1)}" target="_self" title="시세 다시 받기">↻ 새로고침</a><span class="brk"></span>')
+        for k_, label in (("stock", "주식만"), ("etf", "ETF 포함")):
+            h.append(f'<a class="tab{" on" if k_ == kind else ""}" href="{link(t=k_)}" target="_self">{label}</a>')
+        h.append(f'<a class="tab rf" href="{link(t=kind, refresh=1)}" target="_self" title="시세 다시 받기">↻ 새로고침</a><span class="brk"></span>')
         h.append(tm or '<span class="tm">⏱ 측정 중…</span>')
-        h.append(f'<span class="asof">기준 {asof} (한국시간)</span></div>')
+        h.append(f'<span class="asof">거래대금 TOP{TOP_N} · 기준 {asof} (한국시간)</span></div>')
         h.append('<div class="sl-wrap"><table><thead><tr><th class="rk">순위</th>'
                  '<th class="nm">종목</th><th>신호</th><th>현재가($)</th><th>대비</th><th>등락률</th>'
                  '<th>거래대금</th><th>시가</th><th>고가</th><th>저가</th></tr></thead><tbody>')
         for i, (c, nm, close, chg, pct, op, hi, lo, tv, ex) in enumerate(rows, 1):
-            href = html.escape(link(code=c, name=nm, ex=ex))
+            href = html.escape(link(code=c, name=nm, ex=ex, t=kind))
             a = f'<a href="{href}" target="_self">'
             prev = close - chg if (close is not None and chg is not None) else None
             k = "eq" if pct is None else ("up" if pct > 0 else ("dn" if pct < 0 else "eq"))
@@ -478,10 +482,13 @@ BACK_CSS = ('<style>.cv-top{display:flex;align-items:center;gap:12px;flex-wrap:w
             '.tm{font-size:12px;color:#888;white-space:nowrap}.tm b{font-weight:600}</style>')
 
 
+_back_t = "etf" if qp.get("t") == "etf" else "stock"
+
+
 def top_bar(tm: str) -> str:
     """← 목록으로 버튼 + 걸린 시간"""
     return (BACK_CSS + '<div class="cv-top">'
-            f'<a class="back" href="{html.escape(link())}" target="_self">← 목록으로</a>{tm}</div>')
+            f'<a class="back" href="{html.escape(link(t=_back_t))}" target="_self">← 목록으로</a>{tm}</div>')
 
 
 top_ph = st.empty()
