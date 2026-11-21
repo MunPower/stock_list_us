@@ -454,7 +454,7 @@ LIST_CSS = """<style>
 .sl-top .asof{margin-left:auto;font-size:12px;color:#888;white-space:nowrap}
 .tm{font-size:12px;color:#888;white-space:nowrap}.tm b{font-weight:600}
 .sl-top .brk{display:none}
-@media (max-width:600px){.sl-top{flex-wrap:wrap;row-gap:6px}.sl-top .brk{display:block;flex-basis:100%;height:0}.sl-top .tm{flex:1 1 auto;font-size:12px}.sl-top .asof{font-size:12px}}
+@media (max-width:600px){.sl-top .pc{display:none}.sl-top{flex-wrap:wrap;row-gap:6px}.sl-top .brk{display:block;flex-basis:100%;height:0}.sl-top .tm{flex:1 1 auto;font-size:12px}.sl-top .asof{font-size:12px}}
 .sl-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;border:1px solid #c9ced6}
 .sl-wrap table{border-collapse:collapse;width:100%;min-width:820px;font-size:13px;margin:0}
 .sl-wrap th{background:#e9edf3;color:#333;font-weight:600;padding:6px;border:1px solid #d3d8df;white-space:nowrap;text-align:center}
@@ -510,7 +510,7 @@ if not qp.get("code"):
             h.append(f'<a class="tab{" on" if k_ == kind else ""}" href="{link(t=k_)}" target="_self">{label}</a>')
         h.append(f'<a class="tab rf" href="{link(t=kind, refresh=1)}" target="_self" title="시세 다시 받기">↻ 새로고침</a><span class="brk"></span>')
         h.append(tm or '<span class="tm">⏱ 측정 중…</span>')
-        h.append(f'<span class="asof">거래대금 TOP{TOP_N} · 기준 {asof} (한국시간)</span></div>')
+        h.append(f'<span class="asof"><span class="pc">거래대금 TOP{TOP_N} · </span>기준 {asof}<span class="pc"> (한국시간)</span></span></div>')
         h.append('<div class="sl-wrap"><table><thead><tr><th class="rk">순위</th>'
                  '<th class="nm">종목</th><th>신호</th><th>현재가($)</th><th>대비</th><th>등락률</th>'
                  '<th>거래대금</th><th>시가</th><th>고가</th><th>저가</th></tr></thead><tbody>')
