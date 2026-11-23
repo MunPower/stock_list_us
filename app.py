@@ -112,17 +112,33 @@ def _yahoo_daily(sym: str, start: str):
     return d
 
 
+def _clean(d):
+    """시세 정리: 장중에 섞여 오는 빈 값(NaN)·0원 줄 제거, 같은 날짜가 두 번이면 마지막 것만, 날짜순 정렬.
+    시가·고가·저가가 비면 종가로 채움(차트에서 다시 한 번 확인)"""
+    d = d.copy()
+    for c in ("Open", "High", "Low", "Close", "Volume"):
+        if c in d.columns:
+            d[c] = pd.to_numeric(d[c], errors="coerce")
+    d = d[np.isfinite(d["Close"]) & (d["Close"] > 0)]
+    d = d[~d.index.duplicated(keep="last")].sort_index()
+    if "Volume" in d.columns:
+        d["Volume"] = d["Volume"].fillna(0)
+    return d
+
+
 def _daily(sym: str, start: str):
-    """일봉: FinanceDataReader 먼저, 안 되면 야후에서 직접"""
+    """일봉: FinanceDataReader 먼저, 안 되면 야후에서 직접 (둘 다 빈 값 정리 후 사용)"""
     try:
         d = fdr.DataReader(sym, start)
-        if d is not None and len(d) >= 5 and "Close" in d.columns:
+        if d is not None and "Close" in d.columns:
             d.index = pd.to_datetime(d.index).tz_localize(None).normalize() if getattr(d.index, "tz", None) \
                 else pd.to_datetime(d.index).normalize()
-            return d
+            d = _clean(d)
+            if len(d) >= 5:
+                return d
     except Exception:
         pass
-    return _yahoo_daily(sym, start)
+    return _clean(_yahoo_daily(sym, start))
 
 
 def _from_pool(n, kind="stock"):
@@ -660,7 +676,8 @@ hv, lv = np.maximum.reduce([hv, ov, yv]), np.minimum.reduce([lv, ov, yv])
 idx_arr = None
 _live_ok = False
 try:
-    _s = _idf["Close"].reindex(df.index).ffill().bfill()
+    _s = pd.to_numeric(_idf["Close"], errors="coerce").dropna()
+    _s = _s[~_s.index.duplicated(keep="last")].reindex(df.index).ffill().bfill()
     if len(_s) == n and np.isfinite(_s.to_numpy(dtype=float)).all():
         idx_arr = _s.to_numpy(dtype=float)
 except Exception:
