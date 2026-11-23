@@ -271,14 +271,17 @@ def _start(days: int) -> str:
 STORE_TTL = 600     # 받은 시세를 10분 동안 재사용
 
 
+STORE_VER = 2      # 저장소 번호: 바꾸면 서버에 남아 있던 예전 시세를 버리고 새로 받음
+
+
 @st.cache_resource(show_spinner=False)
-def _store():
+def _store(ver: int = STORE_VER):
     """리스트에서 받은 종목 시세를 차트도 그대로 쓰도록 서버에 보관하는 저장소"""
     return {"lock": threading.Lock(), "data": {}}
 
 
 @st.cache_resource(show_spinner=False)
-def _sig_store():
+def _sig_store(ver: int = STORE_VER):
     """종목별 신호 보관함 {(코드, 기간): (그 시세를 받은 시각, 신호)}"""
     return {}
 
@@ -303,12 +306,12 @@ def cached_hist(code: str, days: int):
     """저장소에 10분 이내에 받은 시세가 있으면 그것을, 없으면 None"""
     ent = _store()["data"].get((code, int(days)))
     if ent and time.time() - ent[0] < STORE_TTL:
-        return ent[1]
+        return _clean(ent[1])          # 저장된 시세도 한 번 더 정리해서 사용
     return None
 
 
 def _fetch(code: str, days: int):
-    d = _daily(code, _start(days)).tail(int(days))
+    d = _clean(_daily(code, _start(days))).tail(int(days))
     st_ = _store()
     with st_["lock"]:
         st_["data"][(code, int(days))] = (time.time(), d)
@@ -325,7 +328,7 @@ IDX_SYMS = {"나스닥": ("IXIC", "^IXIC"), "S&P500": ("US500", "^GSPC")}
 
 
 @st.cache_data(ttl=600, show_spinner=False)
-def idx_hist(idx_name: str, days: int):
+def idx_hist(idx_name: str, days: int, ver: int = STORE_VER):
     """지수 일봉: FinanceDataReader 기호 → 안 되면 야후 기호"""
     a, b = IDX_SYMS[idx_name]
     for s in (a, b):
@@ -642,6 +645,9 @@ idx_name = "나스닥" if ex == "NASDAQ" else "S&P500"   # 나스닥 상장 → 
 try:
     _tf = time.time()
     df, _idf = load_both(code, idx_name, calc)
+    df = _clean(df)
+    if _idf is not None:
+        _idf = _clean(_idf)
     t_fetch = time.time() - _tf
 except Exception as e:
     status.empty()
