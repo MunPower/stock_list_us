@@ -126,19 +126,29 @@ def _clean(d):
     return d
 
 
+def _fdr_daily(sym: str, start: str):
+    d = fdr.DataReader(sym, start)
+    d.index = pd.to_datetime(d.index).tz_localize(None).normalize() if getattr(d.index, "tz", None) \
+        else pd.to_datetime(d.index).normalize()
+    return d
+
+
+def _daily_src(sym: str, start: str, src: str):
+    """src = 'yahoo' 또는 'fdr' 한 곳에서만 받기 (빈 값 정리 후)"""
+    return _clean(_yahoo_daily(sym, start) if src == "yahoo" else _fdr_daily(sym, start))
+
+
 def _daily(sym: str, start: str):
-    """일봉: FinanceDataReader 먼저, 안 되면 야후에서 직접 (둘 다 빈 값 정리 후 사용)"""
-    try:
-        d = fdr.DataReader(sym, start)
-        if d is not None and "Close" in d.columns:
-            d.index = pd.to_datetime(d.index).tz_localize(None).normalize() if getattr(d.index, "tz", None) \
-                else pd.to_datetime(d.index).normalize()
-            d = _clean(d)
-            if len(d) >= 5:
+    """일봉: 야후에서 먼저, 안 되면 FinanceDataReader (둘 다 빈 값 정리 후 사용)
+    ※ FinanceDataReader는 장중에 전일 종가가 비어 오는 경우가 있어 뒤로 돌림"""
+    for src in ("yahoo", "fdr"):
+        try:
+            d = _daily_src(sym, start, src)
+            if d is not None and len(d) >= 5:
                 return d
-    except Exception:
-        pass
-    return _clean(_yahoo_daily(sym, start))
+        except Exception:
+            continue
+    return _daily_src(sym, start, "yahoo")
 
 
 def _from_pool(n, kind="stock"):
@@ -271,7 +281,7 @@ def _start(days: int) -> str:
 STORE_TTL = 600     # 받은 시세를 10분 동안 재사용
 
 
-STORE_VER = 2      # 저장소 번호: 바꾸면 서버에 남아 있던 예전 시세를 버리고 새로 받음
+STORE_VER = 3      # 저장소 번호: 바꾸면 서버에 남아 있던 예전 시세를 버리고 새로 받음
 
 
 @st.cache_resource(show_spinner=False)
@@ -534,9 +544,10 @@ if not qp.get("code"):
                  '<th class="nm">종목</th><th>신호</th><th>현재가($)</th><th>대비</th><th>등락률</th>'
                  '<th>거래대금</th><th>시가</th><th>고가</th><th>저가</th></tr></thead><tbody>')
         for i, (c, nm, close, chg, pct, op, hi, lo, tv, ex) in enumerate(rows, 1):
-            href = html.escape(link(code=c, name=(f"{KR[c]} ({nm})" if c in KR else nm), ex=ex, t=kind))
-            a = f'<a href="{href}" target="_self">'
             prev = close - chg if (close is not None and chg is not None) else None
+            href = html.escape(link(code=c, name=(f"{KR[c]} ({nm})" if c in KR else nm), ex=ex, t=kind,
+                                    **({"pc": f"{prev:.4f}"} if prev else {})))   # 전일 종가(차트 확인용)
+            a = f'<a href="{href}" target="_self">'
             k = "eq" if pct is None else ("up" if pct > 0 else ("dn" if pct < 0 else "eq"))
             arrow = "" if not pct else ("▲ " if pct > 0 else "▼ ")
             pct_t = "-" if pct is None else f"{pct:+.2f}%" if pct else "0.00%"
@@ -646,6 +657,22 @@ try:
     _tf = time.time()
     df, _idf = load_both(code, idx_name, calc)
     df = _clean(df)
+    # 리스트(TradingView)의 전일 종가와 차트 시세의 전일 종가가 다르면(하루가 빠졌거나 값이 틀림) 다른 곳에서 다시 받기
+    _pc = _num(qp.get("pc"))
+    _pc_bad = False
+    if _pc and len(df) >= 2 and abs(float(df["Close"].iloc[-2]) / _pc - 1) > 0.015:
+        _pc_bad = True
+        for _src in ("yahoo", "fdr"):
+            try:
+                _d2 = _daily_src(code, _start(calc), _src).tail(int(calc))
+            except Exception:
+                continue
+            if len(_d2) >= 60 and abs(float(_d2["Close"].iloc[-2]) / _pc - 1) <= 0.015:
+                df, _pc_bad = _d2, False
+                with _store()["lock"]:
+                    _store()["data"][(code, int(calc))] = (time.time(), df)   # 리스트 신호도 고친 시세로
+                _sig_store().pop((code, int(calc)), None)
+                break
     if _idf is not None:
         _idf = _clean(_idf)
     t_fetch = time.time() - _tf
@@ -1161,6 +1188,9 @@ show(finish(fig, "곡선추세 방향"), "chart_trend", cv)
 status.empty()
 top_ph.markdown(top_bar(timing_html([("시세", t_fetch), ("계산", t_calc), ("차트", time.time() - _td)])),
                 unsafe_allow_html=True)
+if _pc_bad:
+    st.caption(f"※ 시세 사이트의 전일 종가({float(df['Close'].iloc[-2]):,.2f})가 리스트의 전일 종가({_pc:,.2f})와 달라요. "
+               "잠시 뒤 새로고침해 보세요.")
 if idx_arr is None:
     st.caption("※ 지수 데이터를 불러오지 못해 비교선 없이 표시 중입니다.")
 elif idx_note:
